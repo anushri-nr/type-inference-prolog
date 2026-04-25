@@ -53,6 +53,9 @@ Expressions:
     var(x)                 variable reference
     iplus(int, int)        built-in function call
     add(int, int)          user-defined function call
+    tupleExp([int, bool])  tuple expression
+    some(int)              sum type constructor call
+    none                   zero-argument sum type constructor
 
 Statements:
     expr(E)                expression used as a statement
@@ -60,15 +63,42 @@ Statements:
     gfLet(f, Args, R, B)   global function definition
     if(C, Then, Else)      if statement
     letIn(x, T, E, Body)   local let-in statement
+    tupleLet(Names, T, E, Body)
+                           tuple unpacking let statement
     for(i, Start, End, B)  for statement
+    sumType(Name, Ctors)   sum type definition
+    match(E, Cases)        match statement for sum types
     block([S1, S2])        code block; type is the last statement's type
 
 Function argument lists use pairs of names and types:
     [[x, int], [y, int]]
 
+Tuple types use tuple([...]):
+    tuple([int, string])
+
+Sum types use sum(Name), and constructors are defined with argument type lists:
+    sumType(maybe_int, [[none, []], [some, [int]]])
+
+Match cases use constructor names, local argument names, and a statement body:
+    case(some, [x], expr(var(x)))
+
 For example:
     gfLet(add, [[x, int], [y, int]], int,
           expr(iplus(var(x), var(y))))
+
+    match(some(int),
+          [case(none, [], expr(int)),
+           case(some, [x], expr(var(x)))])
+
+Bonus work completed
+====================
+
+The implementation also includes all listed bonus features:
+
+    A. Sum types, represented with sumType(Name, Constructors)
+    B. Tuple types, represented with tuple([...]) and tupleExp([...])
+    C. Templated tuple assignment, represented with tupleLet(...)
+    D. Match statements, represented with match(Expression, Cases)
 
 Running the code
 ================

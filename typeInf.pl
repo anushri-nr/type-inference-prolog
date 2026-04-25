@@ -11,9 +11,31 @@ typeExp(Var, T):-
     atom(Name),
     gvar(Name, T).
 
+/* tuple expression */
+typeExp(tupleExp(Exprs), tuple(Types)):-
+    !,
+    is_list(Exprs),
+    typeExpList(Exprs, Types).
+
+/* zero-argument constructor */
+typeExp(Atom, T):-
+    atom(Atom),
+    functionType(Atom, [T]),
+    !.
+
+/* propagate compound types */
+typeExp(sum(Name), sum(Name)):-
+    !,
+    atom(Name).
+
+typeExp(tuple(Types), tuple(Types)):-
+    !,
+    bType(tuple(Types)).
+
 typeExp(Fct, T):-
-    \+ var(Fct), /* make sure Fct is not a variable */ 
+    \+ var(Fct), /* make sure Fct is not a variable */
     \+ atom(Fct), /* or an atom */
+    \+ bType(Fct), /* or a compound type like tuple(...) or sum(...) */
     functor(Fct, Fname, _Nargs), /* ensure we have a functor */
     !, /* if we make it here we do not try anything else */
     Fct =.. [Fname|Args], /* get list of arguments */
@@ -30,6 +52,30 @@ typeExpList([], []).
 typeExpList([Hin|Tin], [Hout|Tout]):-
     typeExp(Hin, Hout), /* type infer the head */
     typeExpList(Tin, Tout). /* recurse */
+
+bTypeList([]).
+bTypeList([Type|Types]):-
+    bType(Type),
+    bTypeList(Types).
+
+/* constructor signature for a sum type */
+constructorArgs(Ctor, TypeName, ArgTypes):-
+    gvar(Ctor, FType),
+    append(ArgTypes, [sum(TypeName)], FType).
+
+/* type all match cases against the same sum type and result type */
+typeCases([], _TypeName, _T).
+typeCases([case(Ctor, Names, Body)|Cases], TypeName, T):-
+    atom(Ctor),
+    is_list(Names),
+    constructorArgs(Ctor, TypeName, ArgTypes),
+    setup_call_cleanup(
+        assertTupleVars(Names, ArgTypes, Refs),
+        once(typeStatement(Body, T)),
+        eraseRefs(Refs)
+    ),
+    bType(T),
+    typeCases(Cases, TypeName, T).
 
 /* extract argument types from function argument declarations */
 argTypes([], []).
@@ -48,7 +94,25 @@ eraseRefs([]).
 eraseRefs([Ref|Refs]):-
     erase(Ref),
     eraseRefs(Refs).
+
+/* temporarily add tuple unpacked variables as local variables */
+assertTupleVars([], [], []).
+assertTupleVars([Name|Names], [Type|Types], [Ref|Refs]):-
+    atom(Name),
+    bType(Type),
+    asserta(gvar(Name, Type), Ref),
+    assertTupleVars(Names, Types, Refs).
     
+/* register sum type constructors as function types */
+assertConstructors([], _TypeName).
+assertConstructors([[Ctor, ArgTypes]|Ctors], TypeName):-
+    atom(Ctor),
+    is_list(ArgTypes),
+    bTypeList(ArgTypes),
+    append(ArgTypes, [sum(TypeName)], FType),
+    asserta(gvar(Ctor, FType)),
+    assertConstructors(Ctors, TypeName).
+
 /* TODO: add statements types and their type checking */
 /* expression computation as a statement */
 typeStatement(expr(Code), T):-
@@ -79,6 +143,18 @@ typeStatement(letIn(Name, Type, Init, Body), T):-
     ),
     bType(T).
 
+/* tuple unpacking let statement */
+typeStatement(tupleLet(Names, tuple(Types), Init, Body), T):-
+    is_list(Names),
+    is_list(Types),
+    typeExp(Init, tuple(Types)),
+    setup_call_cleanup(
+        assertTupleVars(Names, Types, Refs),
+        once(typeStatement(Body, T)),
+        eraseRefs(Refs)
+    ),
+    bType(T).
+
 /* for statement */
 typeStatement(for(Var, Start, End, Body), unit):-
     atom(Var),
@@ -103,6 +179,19 @@ typeStatement(gfLet(Name, Args, ReturnType, Body), unit):-
         eraseRefs(Refs)
     ),
     asserta(gvar(Name, FType)).
+
+/* sum type definition */
+typeStatement(sumType(TypeName, Constructors), unit):-
+    atom(TypeName),
+    is_list(Constructors),
+    assertConstructors(Constructors, TypeName).
+
+/* match statement for sum types */
+typeStatement(match(Expr, Cases), T):-
+    is_list(Cases),
+    typeExp(Expr, sum(TypeName)),
+    typeCases(Cases, TypeName, T),
+    bType(T).
 
 /* global variable definition
     Example:
@@ -136,6 +225,12 @@ bType(float).
 bType(string).
 bType(bool).
 bType(unit). /* unit type for things that are not expressions */
+bType(tuple(Types)):-
+    is_list(Types),
+    bTypeList(Types).
+bType(sum(Name)):-
+    atom(Name).
+
 /*  functions type.
     The type is a list, the last element is the return type
     E.g. add: int->int->int is represented as [int, int, int]

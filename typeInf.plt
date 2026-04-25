@@ -201,4 +201,126 @@ test(infer_gfLet_block_body, [nondet, true(T == bool)]) :-
                  block([expr(igt(var(x), int))])),
            expr(is_positive(int))], T).
 
+test(typeExp_tuple, [true(T == tuple([int, string]))]) :-
+    typeExp(tupleExp([int, string]), T).
+
+test(typeExp_tuple_nested, [true(T == tuple([int, tuple([string, bool])]))]) :-
+    typeExp(tupleExp([int, tupleExp([string, bool])]), T).
+
+test(infer_tuple_expr, [nondet, true(T == tuple([int, bool]))]) :-
+    infer([expr(tupleExp([iplus(int, int), ilt(int, int)]))], T).
+
+test(infer_tuple_gvar, [nondet]) :-
+    infer([gvLet(pair, T, tupleExp([int, string])),
+           expr(var(pair))], tuple([int, string])),
+    assertion(T == tuple([int, string])).
+
+test(typeExp_tuple_bad, [fail]) :-
+    typeExp(tupleExp([iplus(string, int), bool]), _T).
+
+test(typeStatement_tupleLet, [true(T == int)]) :-
+    deleteGVars(),
+    typeStatement(tupleLet([x, y], tuple([int, string]),
+                           tupleExp([int, string]),
+                           expr(var(x))), T).
+
+test(infer_tupleLet_first, [nondet, true(T == int)]) :-
+    infer([tupleLet([x, y], tuple([int, string]),
+                    tupleExp([int, string]),
+                    expr(var(x)))], T).
+
+test(infer_tupleLet_second, [nondet, true(T == string)]) :-
+    infer([tupleLet([x, y], tuple([int, string]),
+                    tupleExp([int, string]),
+                    expr(var(y)))], T).
+
+test(infer_tupleLet_use_both, [nondet, true(T == bool)]) :-
+    infer([tupleLet([x, y], tuple([int, string]),
+                    tupleExp([int, string]),
+                    block([expr(ilt(var(x), int)), expr(var(y)), expr(bool)]))], T).
+
+test(infer_tupleLet_bad_init_type, [fail]) :-
+    infer([tupleLet([x, y], tuple([int, string]),
+                    tupleExp([int, bool]),
+                    expr(var(x)))], _T).
+
+test(infer_tupleLet_arity_mismatch, [fail]) :-
+    infer([tupleLet([x], tuple([int, string]),
+                    tupleExp([int, string]),
+                    expr(var(x)))], _T).
+
+test(infer_tupleLet_no_leak, [fail]) :-
+    infer([tupleLet([x, y], tuple([int, string]),
+                    tupleExp([int, string]),
+                    expr(var(x))),
+           expr(var(y))], _T).
+
+test(typeStatement_sumType, [nondet]) :-
+    deleteGVars(),
+    typeStatement(sumType(maybe_int, [[none, []], [some, [int]]]), unit),
+    gvar(none, [sum(maybe_int)]),
+    gvar(some, [int, sum(maybe_int)]).
+
+test(infer_sumType_none, [nondet, true(T == sum(maybe_int))]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           expr(none)], T).
+
+test(infer_sumType_some, [nondet, true(T == sum(maybe_int))]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           expr(some(int))], T).
+
+test(infer_sumType_bad_arg, [fail]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           expr(some(string))], _T).
+
+test(infer_sumType_in_function, [nondet, true(T == sum(maybe_int))]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           gfLet(make_some, [[x, int]], sum(maybe_int),
+                 expr(some(var(x)))),
+           expr(make_some(int))], T).
+
+test(typeStatement_match_some, [nondet, true(T == int)]) :-
+    deleteGVars(),
+    typeStatement(sumType(maybe_int, [[none, []], [some, [int]]]), unit),
+    typeStatement(match(some(int),
+                        [case(none, [], expr(int)),
+                         case(some, [x], expr(var(x)))]), T).
+
+test(infer_match_some, [nondet, true(T == int)]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(some(int),
+                 [case(none, [], expr(int)),
+                  case(some, [x], expr(var(x)))])], T).
+
+test(infer_match_none, [nondet, true(T == int)]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(none,
+                 [case(none, [], expr(int)),
+                  case(some, [x], expr(var(x)))])], T).
+
+test(infer_match_branch_mismatch, [fail]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(some(int),
+                 [case(none, [], expr(string)),
+                  case(some, [x], expr(var(x)))])], _T).
+
+test(infer_match_bad_ctor, [fail]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(some(int),
+                 [case(nope, [], expr(int)),
+                  case(some, [x], expr(var(x)))])], _T).
+
+test(infer_match_arity_mismatch, [fail]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(some(int),
+                 [case(none, [], expr(int)),
+                  case(some, [], expr(int))])], _T).
+
+test(infer_match_no_leak, [fail]) :-
+    infer([sumType(maybe_int, [[none, []], [some, [int]]]),
+           match(some(int),
+                 [case(none, [], expr(int)),
+                  case(some, [x], expr(var(x)))]),
+           expr(var(x))], _T).
+
 :-end_tests(typeInf).
