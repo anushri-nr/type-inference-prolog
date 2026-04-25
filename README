@@ -42,6 +42,34 @@ mattes so any constants in the corresponding OCaml code become basic
 types. For example "let v = 3" gets translated as "gvLet(v, T, int)" since 
 3->int and we do not care about values, only types. 
 
+Code representation used
+========================
+
+The implementation represents OCaml-like code with Prolog terms. Since this
+assignment only infers types, literal values are represented by their basic
+types, such as int, float, string, bool, and unit.
+
+Expressions:
+    var(x)                 variable reference
+    iplus(int, int)        built-in function call
+    add(int, int)          user-defined function call
+
+Statements:
+    expr(E)                expression used as a statement
+    gvLet(x, T, E)         global variable definition
+    gfLet(f, Args, R, B)   global function definition
+    if(C, Then, Else)      if statement
+    letIn(x, T, E, Body)   local let-in statement
+    for(i, Start, End, B)  for statement
+    block([S1, S2])        code block; type is the last statement's type
+
+Function argument lists use pairs of names and types:
+    [[x, int], [y, int]]
+
+For example:
+    gfLet(add, [[x, int], [y, int]], int,
+          expr(iplus(var(x), var(y))))
+
 Running the code
 ================
 
